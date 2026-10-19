@@ -1,127 +1,235 @@
-const prisma = require("../lib/prisma");
-const { z } = require("zod");
+﻿
+import prisma from "../lib/prisma.js";
+import { z } from "zod";
 
 const createSchema = z.object({
-  content: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(5000),
   taskId: z.coerce.number().int().positive(),
-  authorId: z.coerce.number().int().positive()
 });
 
 const updateSchema = z.object({
-  content: z.string().trim().min(1)
+  content: z.string().trim().min(1).max(5000),
 });
 
-exports.getAll = async (req, res, next) => {
-  try {
-    const comments = await prisma.comment.findMany({
-      include: {
-        author: { select: { id: true, name: true, email: true } },
-        task: { select: { id: true, title: true } }
+const commentSelect = {
+  id: true,
+  content: true,
+  authorId: true,
+  taskId: true,
+  author: {
+    select: { id: true, name: true, email: true },
+  },
+  task: {
+    select: {
+      id: true,
+      title: true,
+      project: {
+        select: { id: true, name: true, ownerId: true },
       },
-      orderBy: { id: "asc" }
+    },
+  },
+};
+
+function canRead(comment, req) {
+  return (
+    comment.authorId === Number(req.user.id) ||
+    comment.task.project.ownerId === Number(req.user.id) ||
+    req.user.role === "ADMIN"
+  );
+}
+
+function canManage(comment, req) {
+  return (
+    comment.authorId === Number(req.user.id) ||
+    req.user.role === "ADMIN"
+  );
+}
+
+export const getAll = async (req, res, next) => {
+  try {
+    const where =
+      req.user.role === "ADMIN"
+        ? {}
+        : {
+            OR: [
+              { authorId: Number(req.user.id) },
+              { task: { project: { ownerId: Number(req.user.id) } } },
+            ],
+          };
+
+    const comments = await prisma.comment.findMany({
+      where,
+      select: commentSelect,
+      orderBy: { id: "asc" },
     });
-    res.json(comments);
+
+    return res.json(comments);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-exports.getById = async (req, res, next) => {
+export const getById = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+
     if (!Number.isInteger(id) || id < 1) {
-      return res.status(400).json({ error: "екоректний ID коментаря" });
+      return res.status(400).json({
+        error: "Некоректний ID коментаря",
+      });
     }
 
     const comment = await prisma.comment.findUnique({
       where: { id },
-      include: {
-        author: { select: { id: true, name: true, email: true } },
-        task: { select: { id: true, title: true } }
-      }
+      select: commentSelect,
     });
 
     if (!comment) {
-      return res.status(404).json({ error: "оментар не знайдено" });
+      return res.status(404).json({
+        error: "Коментар не знайдено",
+      });
     }
 
-    res.json(comment);
+    if (!canRead(comment, req)) {
+      return res.status(403).json({
+        error: "Недостатньо прав для перегляду коментаря",
+      });
+    }
+
+    return res.json(comment);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-exports.create = async (req, res, next) => {
+export const create = async (req, res, next) => {
   try {
     const parsed = createSchema.safeParse(req.body);
+
     if (!parsed.success) {
       return res.status(400).json({
-        error: "екоректні дані",
-        details: parsed.error.issues
+        error: "Некоректні дані",
+        details: parsed.error.issues,
+      });
+    }
+
+    const task = await prisma.task.findUnique({
+      where: { id: parsed.data.taskId },
+      select: {
+        id: true,
+        project: { select: { ownerId: true } },
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        error: "Завдання не знайдено",
+      });
+    }
+
+    if (
+      task.project.ownerId !== Number(req.user.id) &&
+      req.user.role !== "ADMIN"
+    ) {
+      return res.status(403).json({
+        error: "Немає доступу до цього завдання",
       });
     }
 
     const comment = await prisma.comment.create({
-      data: parsed.data,
-      include: {
-        author: { select: { id: true, name: true, email: true } },
-        task: { select: { id: true, title: true } }
-      }
+      data: {
+        content: parsed.data.content,
+        taskId: parsed.data.taskId,
+        authorId: Number(req.user.id),
+      },
+      select: commentSelect,
     });
 
-    res.status(201).json(comment);
+    return res.status(201).json(comment);
   } catch (error) {
-    if (error.code === "P2003") {
-      return res.status(400).json({
-        error: "ористувача або завдання із зазначеним ID не знайдено"
-      });
-    }
-    next(error);
+    return next(error);
   }
 };
 
-exports.update = async (req, res, next) => {
+export const update = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+
     if (!Number.isInteger(id) || id < 1) {
-      return res.status(400).json({ error: "екоректний ID коментаря" });
+      return res.status(400).json({
+        error: "Некоректний ID коментаря",
+      });
     }
 
     const parsed = updateSchema.safeParse(req.body);
+
     if (!parsed.success) {
       return res.status(400).json({
-        error: "екоректні дані",
-        details: parsed.error.issues
+        error: "Некоректні дані",
+        details: parsed.error.issues,
+      });
+    }
+
+    const existing = await prisma.comment.findUnique({
+      where: { id },
+      select: { id: true, authorId: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        error: "Коментар не знайдено",
+      });
+    }
+
+    if (!canManage(existing, req)) {
+      return res.status(403).json({
+        error: "Редагувати коментар може лише його автор або адміністратор",
       });
     }
 
     const comment = await prisma.comment.update({
       where: { id },
-      data: parsed.data
+      data: parsed.data,
+      select: commentSelect,
     });
 
-    res.json(comment);
+    return res.json(comment);
   } catch (error) {
-    if (error.code === "P2025") {
-      return res.status(404).json({ error: "оментар не знайдено" });
-    }
-    next(error);
+    return next(error);
   }
 };
 
-exports.remove = async (req, res, next) => {
+export const remove = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
+
     if (!Number.isInteger(id) || id < 1) {
-      return res.status(400).json({ error: "екоректний ID коментаря" });
+      return res.status(400).json({
+        error: "Некоректний ID коментаря",
+      });
+    }
+
+    const existing = await prisma.comment.findUnique({
+      where: { id },
+      select: { id: true, authorId: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        error: "Коментар не знайдено",
+      });
+    }
+
+    if (!canManage(existing, req)) {
+      return res.status(403).json({
+        error: "Видалити коментар може лише його автор або адміністратор",
+      });
     }
 
     await prisma.comment.delete({ where: { id } });
-    res.status(204).send();
+
+    return res.status(204).send();
   } catch (error) {
-    if (error.code === "P2025") {
-      return res.status(404).json({ error: "оментар не знайдено" });
-    }
-    next(error);
+    return next(error);
   }
 };

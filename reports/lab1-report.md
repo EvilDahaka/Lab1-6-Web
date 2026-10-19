@@ -4,7 +4,7 @@
 
 Здобувач освіти: Лешо Давид Сергійович  
 Група: 42  
-GitHub репозиторій: [https://github.com/EvilDahaka/Lab-1-Web.git](https://github.com/EvilDahaka/Lab-1-Web.git)
+GitHub репозиторій: [https://github.com/EvilDahaka/Lab1-6-Web.git]
 
 ## Виконання роботи
 

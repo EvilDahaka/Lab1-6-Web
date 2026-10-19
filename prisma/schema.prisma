@@ -1,10 +1,10 @@
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum TaskStatus {
@@ -19,14 +19,48 @@ enum TaskPriority {
   HIGH
 }
 
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
 model User {
-  id        Int       @id @default(autoincrement())
-  name      String
-  email     String    @unique
-  projects  Project[]
-  tasks     Task[]
-  comments  Comment[]
-  createdAt DateTime  @default(now())
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(USER)
+  projects     Project[]
+  tasks        Task[]
+  comments     Comment[]
+  refreshTokens RefreshToken[]
+  files        UploadedFile[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model UploadedFile {
+  id           Int      @id @default(autoincrement())
+  originalName String
+  storedName   String   @unique
+  mimeType     String
+  size         Int
+  path         String
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Project {
