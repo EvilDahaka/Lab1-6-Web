@@ -2,6 +2,32 @@
 import prisma from "../lib/prisma.js";
 import { z } from "zod";
 
+function notifyProjectUsers(io, event, project) {
+  if (!io || !project) return;
+
+  const userIds = new Set([
+    project.ownerId,
+    ...(project.tasks || []).map((task) => task.assigneeId),
+  ]);
+
+  for (const userId of userIds) {
+    if (userId != null) {
+      io.to(`user:${userId}`).emit(event, {
+        project,
+        notification: {
+          type: event,
+          priority: "MEDIUM",
+          message:
+            event === "project:created"
+              ? `Створено проєкт: ${project.name}`
+              : `Оновлено проєкт: ${project.name}`,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    }
+  }
+}
+
 const projectSchema = z.object({
   name: z.string().trim().min(2).max(100),
   description: z.string().trim().max(1000).optional().nullable(),
@@ -18,7 +44,6 @@ const projectSelect = {
   description: true,
   ownerId: true,
   createdAt: true,
-  updatedAt: true,
   owner: {
     select: {
       id: true,
@@ -115,11 +140,15 @@ async function getById(req, res, next) {
     });
 
     if (!project) {
-      return res.status(404).json({ error: "Проєкт не знайдено" });
+      return res.status(404).json({
+        error: "Проєкт не знайдено",
+      });
     }
 
     if (!canManage(project, req)) {
-      return res.status(403).json({ error: "Недостатньо прав" });
+      return res.status(403).json({
+        error: "Недостатньо прав",
+      });
     }
 
     return res.json(project);
@@ -146,6 +175,12 @@ async function create(req, res, next) {
       },
       select: projectSelect,
     });
+
+    notifyProjectUsers(
+      req.app.get("io"),
+      "project:created",
+      project,
+    );
 
     return res.status(201).json(project);
   } catch (error) {
@@ -178,11 +213,15 @@ async function update(req, res, next) {
     });
 
     if (!existing) {
-      return res.status(404).json({ error: "Проєкт не знайдено" });
+      return res.status(404).json({
+        error: "Проєкт не знайдено",
+      });
     }
 
     if (!canManage(existing, req)) {
-      return res.status(403).json({ error: "Недостатньо прав" });
+      return res.status(403).json({
+        error: "Недостатньо прав",
+      });
     }
 
     const project = await prisma.project.update({
@@ -190,6 +229,12 @@ async function update(req, res, next) {
       data: result.data,
       select: projectSelect,
     });
+
+    notifyProjectUsers(
+      req.app.get("io"),
+      "project:updated",
+      project,
+    );
 
     return res.json(project);
   } catch (error) {
@@ -213,14 +258,19 @@ async function remove(req, res, next) {
     });
 
     if (!existing) {
-      return res.status(404).json({ error: "Проєкт не знайдено" });
+      return res.status(404).json({
+        error: "Проєкт не знайдено",
+      });
     }
 
     if (!canManage(existing, req)) {
-      return res.status(403).json({ error: "Недостатньо прав" });
+      return res.status(403).json({
+        error: "Недостатньо прав",
+      });
     }
 
     await prisma.project.delete({ where: { id } });
+
     return res.status(204).send();
   } catch (error) {
     return next(error);

@@ -45,6 +45,34 @@ function canManage(comment, req) {
   );
 }
 
+function notifyCommentUsers(io, event, comment) {
+  if (!io || !comment) return;
+
+  const userIds = new Set([
+    comment.authorId,
+    comment.task?.project?.ownerId,
+  ]);
+
+  for (const userId of userIds) {
+    if (userId == null) continue;
+
+    io.to(`user:${userId}`).emit(event, {
+      comment,
+      notification: {
+        type: event,
+        priority: "MEDIUM",
+        message:
+          event === "comment:created"
+            ? `Додано коментар до завдання: ${comment.task.title}`
+            : event === "comment:updated"
+              ? `Оновлено коментар до завдання: ${comment.task.title}`
+              : `Видалено коментар до завдання: ${comment.task.title}`,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  }
+}
+
 export const getAll = async (req, res, next) => {
   try {
     const where =
@@ -53,7 +81,13 @@ export const getAll = async (req, res, next) => {
         : {
             OR: [
               { authorId: Number(req.user.id) },
-              { task: { project: { ownerId: Number(req.user.id) } } },
+              {
+                task: {
+                  project: {
+                    ownerId: Number(req.user.id),
+                  },
+                },
+              },
             ],
           };
 
@@ -117,7 +151,9 @@ export const create = async (req, res, next) => {
       where: { id: parsed.data.taskId },
       select: {
         id: true,
-        project: { select: { ownerId: true } },
+        project: {
+          select: { ownerId: true },
+        },
       },
     });
 
@@ -144,6 +180,12 @@ export const create = async (req, res, next) => {
       },
       select: commentSelect,
     });
+
+    notifyCommentUsers(
+      req.app.get("io"),
+      "comment:created",
+      comment
+    );
 
     return res.status(201).json(comment);
   } catch (error) {
@@ -172,7 +214,10 @@ export const update = async (req, res, next) => {
 
     const existing = await prisma.comment.findUnique({
       where: { id },
-      select: { id: true, authorId: true },
+      select: {
+        id: true,
+        authorId: true,
+      },
     });
 
     if (!existing) {
@@ -183,7 +228,8 @@ export const update = async (req, res, next) => {
 
     if (!canManage(existing, req)) {
       return res.status(403).json({
-        error: "Редагувати коментар може лише його автор або адміністратор",
+        error:
+          "Редагувати коментар може лише його автор або адміністратор",
       });
     }
 
@@ -192,6 +238,12 @@ export const update = async (req, res, next) => {
       data: parsed.data,
       select: commentSelect,
     });
+
+    notifyCommentUsers(
+      req.app.get("io"),
+      "comment:updated",
+      comment
+    );
 
     return res.json(comment);
   } catch (error) {
@@ -211,7 +263,7 @@ export const remove = async (req, res, next) => {
 
     const existing = await prisma.comment.findUnique({
       where: { id },
-      select: { id: true, authorId: true },
+      select: commentSelect,
     });
 
     if (!existing) {
@@ -222,11 +274,20 @@ export const remove = async (req, res, next) => {
 
     if (!canManage(existing, req)) {
       return res.status(403).json({
-        error: "Видалити коментар може лише його автор або адміністратор",
+        error:
+          "Видалити коментар може лише його автор або адміністратор",
       });
     }
 
-    await prisma.comment.delete({ where: { id } });
+    await prisma.comment.delete({
+      where: { id },
+    });
+
+    notifyCommentUsers(
+      req.app.get("io"),
+      "comment:deleted",
+      existing
+    );
 
     return res.status(204).send();
   } catch (error) {

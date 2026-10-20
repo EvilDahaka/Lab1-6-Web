@@ -2,6 +2,34 @@
 import prisma from "../lib/prisma.js";
 import { z } from "zod";
 
+function notifyTaskUsers(io, event, task) {
+  if (!io || !task) return;
+
+  const userIds = new Set([
+    task.project?.ownerId,
+    task.assigneeId,
+  ]);
+
+  for (const userId of userIds) {
+    if (userId != null) {
+      io.to(`user:${userId}`).emit(event, {
+        task,
+        notification: {
+          type: event,
+          priority: task.priority,
+          message:
+            event === "task:created"
+              ? `Створено завдання: ${task.title}`
+              : event === "task:updated"
+                ? `Оновлено завдання: ${task.title}`
+                : `Видалено завдання: ${task.title}`,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    }
+  }
+}
+
 const taskSchema = z.object({
   title: z.string().trim().min(2).max(200),
   description: z.string().trim().max(2000).optional().nullable(),
@@ -208,6 +236,9 @@ async function create(req, res, next) {
       select: taskSelect,
     });
 
+    const io = req.app.get("io");
+    notifyTaskUsers(io, "task:created", task);
+
     return res.status(201).json(task);
   } catch (error) {
     return next(error);
@@ -259,6 +290,9 @@ async function update(req, res, next) {
       select: taskSelect,
     });
 
+    const io = req.app.get("io");
+    notifyTaskUsers(io, "task:updated", task);
+
     return res.json(task);
   } catch (error) {
     return next(error);
@@ -279,7 +313,13 @@ async function remove(req, res, next) {
       where: { id },
       select: {
         id: true,
-        project: { select: { ownerId: true } },
+        title: true,
+        priority: true,
+        projectId: true,
+        assigneeId: true,
+        project: {
+          select: { ownerId: true },
+        },
       },
     });
 
@@ -295,7 +335,12 @@ async function remove(req, res, next) {
       });
     }
 
+    const io = req.app.get("io");
+
     await prisma.task.delete({ where: { id } });
+
+    notifyTaskUsers(io, "task:deleted", existing);
+
     return res.status(204).send();
   } catch (error) {
     return next(error);
