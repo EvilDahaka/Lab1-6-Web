@@ -24,7 +24,6 @@
     "supertest": "^7.3.1"
   },
   "scripts": {
-    "postinstall": "prisma skills sync || exit 0",
     "start": "node src/server.js",
     "dev": "node --env-file=.env --watch src/server.js",
     "test": "node --env-file=.env --test",
