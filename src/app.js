@@ -10,9 +10,11 @@ import commentRoutes from "./routes/commentRoutes.js";
 import fileRoutes from "./routes/fileRoutes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./docs/swagger.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 const app = express();
 
+app.use("/api/notifications", notificationRoutes);
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));

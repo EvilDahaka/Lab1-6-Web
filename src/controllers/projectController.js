@@ -1,6 +1,7 @@
 ﻿
 import prisma from "../lib/prisma.js";
 import { z } from "zod";
+import { createNotification } from "../services/notificationService.js";
 
 function notifyProjectUsers(io, event, project) {
   if (!io || !project) return;
@@ -25,6 +26,35 @@ function notifyProjectUsers(io, event, project) {
         },
       });
     }
+  }
+}
+
+async function saveProjectNotifications(io, project, event) {
+  if (!project) return;
+
+  const userIds = new Set([
+    project.ownerId,
+    ...(project.tasks || []).map((task) => task.assigneeId),
+  ]);
+
+  const messages = {
+    "project:created": `Створено проєкт: ${project.name}`,
+    "project:updated": `Оновлено проєкт: ${project.name}`,
+  };
+
+  const message = messages[event];
+
+  if (!message) return;
+
+  for (const userId of userIds) {
+    if (userId == null) continue;
+
+    await createNotification(prisma, io, {
+      userId,
+      type: event,
+      priority: "MEDIUM",
+      message,
+    });
   }
 }
 
@@ -176,11 +206,10 @@ async function create(req, res, next) {
       select: projectSelect,
     });
 
-    notifyProjectUsers(
-      req.app.get("io"),
-      "project:created",
-      project,
-    );
+    const io = req.app.get("io");
+
+    notifyProjectUsers(io, "project:created", project);
+    await saveProjectNotifications(io, project, "project:created");
 
     return res.status(201).json(project);
   } catch (error) {
@@ -230,11 +259,10 @@ async function update(req, res, next) {
       select: projectSelect,
     });
 
-    notifyProjectUsers(
-      req.app.get("io"),
-      "project:updated",
-      project,
-    );
+    const io = req.app.get("io");
+
+    notifyProjectUsers(io, "project:updated", project);
+    await saveProjectNotifications(io, project, "project:updated");
 
     return res.json(project);
   } catch (error) {

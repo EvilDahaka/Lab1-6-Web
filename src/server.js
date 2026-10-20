@@ -12,11 +12,16 @@ const io = initSocket(server);
 app.set("io", io);
 
 server.listen(PORT, () => {
-  console.log(`Сервер запущено: http://localhost:${PORT}`);
+  console.log(`Сервер запущено на порті ${PORT}`);
 });
 
-process.on("SIGINT", () => {
+function shutdown() {
   io.close(() => {
-    process.exit(0);
+    server.close(() => {
+      process.exit(0);
+    });
   });
-});
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

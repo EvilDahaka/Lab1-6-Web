@@ -1,6 +1,7 @@
 
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import prisma from "../lib/prisma.js";
 
 // userId -> набір активних socket-з'єднань
 const onlineUsers = new Map();
@@ -13,7 +14,7 @@ export function initSocket(server) {
     },
   });
 
-  // JWT-авторизація WebSocket
+  // JWT-авторизація Socket.IO
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
 
@@ -23,6 +24,10 @@ export function initSocket(server) {
 
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+      if (!payload.sub) {
+        return next(new Error("Токен не містить ID користувача"));
+      }
 
       socket.user = {
         id: String(payload.sub),
@@ -38,6 +43,7 @@ export function initSocket(server) {
   io.on("connection", (socket) => {
     const userId = socket.user.id;
 
+    // Персональна кімната користувача
     socket.join(`user:${userId}`);
 
     let userSockets = onlineUsers.get(userId);
@@ -50,12 +56,10 @@ export function initSocket(server) {
     const wasOffline = userSockets.size === 0;
     userSockets.add(socket.id);
 
-    // Передаємо клієнту поточний список онлайн-користувачів
     socket.emit("presence:list", {
       onlineUserIds: [...onlineUsers.keys()],
     });
 
-    // Повідомляємо інших лише про перехід користувача онлайн
     if (wasOffline) {
       io.emit("presence:update", {
         userId,
@@ -69,21 +73,94 @@ export function initSocket(server) {
       userId,
     });
 
-    // Дозволяємо клієнту запросити актуальний список
     socket.on("presence:get", () => {
       socket.emit("presence:list", {
         onlineUserIds: [...onlineUsers.keys()],
       });
     });
 
+    // Приєднання до кімнати проєкту з перевіркою доступу
+    socket.on("room:join", async (projectId) => {
+      try {
+        const id = Number(projectId);
+        const numericUserId = Number(userId);
+
+        if (
+          !Number.isInteger(id) ||
+          id <= 0 ||
+          !Number.isInteger(numericUserId) ||
+          numericUserId <= 0
+        ) {
+          socket.emit("socket:error", {
+            message: "Некоректний ID проєкту або користувача",
+          });
+          return;
+        }
+
+        const project = await prisma.project.findFirst({
+          where: {
+            id,
+            OR: [
+              { ownerId: numericUserId },
+              {
+                tasks: {
+                  some: {
+                    assigneeId: numericUserId,
+                  },
+                },
+              },
+            ],
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!project) {
+          socket.emit("socket:error", {
+            message: "Немає доступу до цього проєкту",
+          });
+          return;
+        }
+
+        await socket.join(`project:${id}`);
+
+        socket.emit("room:joined", {
+          projectId: id,
+        });
+      } catch (error) {
+        console.error("Помилка room:join:", error);
+
+        socket.emit("socket:error", {
+          message: "Не вдалося приєднатися до кімнати проєкту",
+        });
+      }
+    });
+
+    // Вихід із кімнати проєкту
+    socket.on("room:leave", async (projectId) => {
+      const id = Number(projectId);
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return;
+      }
+
+      await socket.leave(`project:${id}`);
+
+      socket.emit("room:left", {
+        projectId: id,
+      });
+    });
+
     socket.on("disconnect", () => {
       const sockets = onlineUsers.get(userId);
 
-      if (!sockets) return;
+      if (!sockets) {
+        return;
+      }
 
       sockets.delete(socket.id);
 
-      // Якщо в користувача немає інших активних з'єднань
       if (sockets.size === 0) {
         onlineUsers.delete(userId);
 

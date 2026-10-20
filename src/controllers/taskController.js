@@ -1,6 +1,7 @@
 ﻿
 import prisma from "../lib/prisma.js";
 import { z } from "zod";
+import { createNotification } from "../services/notificationService.js";
 
 function notifyTaskUsers(io, event, task) {
   if (!io || !task) return;
@@ -10,23 +11,60 @@ function notifyTaskUsers(io, event, task) {
     task.assigneeId,
   ]);
 
+  const rooms = [...userIds]
+    .filter((userId) => userId != null)
+    .map((userId) => `user:${userId}`);
+
+  if (task.projectId != null) {
+    rooms.push(`project:${task.projectId}`);
+  }
+
+  if (rooms.length === 0) return;
+
+  const messages = {
+    "task:created": `Створено завдання: ${task.title}`,
+    "task:updated": `Оновлено завдання: ${task.title}`,
+    "task:deleted": `Видалено завдання: ${task.title}`,
+  };
+
+  io.to(rooms).emit(event, {
+    task,
+    notification: {
+      type: event,
+      priority: task.priority ?? "MEDIUM",
+      message: messages[event],
+      createdAt: new Date().toISOString(),
+    },
+  });
+}
+
+async function saveTaskNotifications(io, task, event) {
+  if (!task) return;
+
+  const userIds = new Set([
+    task.project?.ownerId,
+    task.assigneeId,
+  ]);
+
+  const messages = {
+    "task:created": `Створено завдання: ${task.title}`,
+    "task:updated": `Оновлено завдання: ${task.title}`,
+    "task:deleted": `Видалено завдання: ${task.title}`,
+  };
+
+  const message = messages[event];
+
+  if (!message) return;
+
   for (const userId of userIds) {
-    if (userId != null) {
-      io.to(`user:${userId}`).emit(event, {
-        task,
-        notification: {
-          type: event,
-          priority: task.priority,
-          message:
-            event === "task:created"
-              ? `Створено завдання: ${task.title}`
-              : event === "task:updated"
-                ? `Оновлено завдання: ${task.title}`
-                : `Видалено завдання: ${task.title}`,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
+    if (userId == null) continue;
+
+    await createNotification(io, {
+      userId,
+      type: event,
+      priority: task.priority ?? "MEDIUM",
+      message,
+    });
   }
 }
 
@@ -89,7 +127,11 @@ function canManage(task, req) {
 
 async function getAll(req, res, next) {
   try {
-    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const page = Math.max(
+      1,
+      Number.parseInt(req.query.page, 10) || 1,
+    );
+
     const limit = Math.min(
       100,
       Math.max(1, Number.parseInt(req.query.limit, 10) || 10),
@@ -134,7 +176,10 @@ async function getAll(req, res, next) {
     if (projectId !== undefined) {
       const parsedProjectId = Number(projectId);
 
-      if (!Number.isInteger(parsedProjectId) || parsedProjectId < 1) {
+      if (
+        !Number.isInteger(parsedProjectId) ||
+        parsedProjectId < 1
+      ) {
         return res.status(400).json({
           error: "Некоректний ID проєкту",
         });
@@ -237,7 +282,9 @@ async function create(req, res, next) {
     });
 
     const io = req.app.get("io");
+
     notifyTaskUsers(io, "task:created", task);
+    await saveTaskNotifications(io, task, "task:created");
 
     return res.status(201).json(task);
   } catch (error) {
@@ -268,7 +315,9 @@ async function update(req, res, next) {
       where: { id },
       select: {
         id: true,
-        project: { select: { ownerId: true } },
+        project: {
+          select: { ownerId: true },
+        },
       },
     });
 
@@ -291,7 +340,9 @@ async function update(req, res, next) {
     });
 
     const io = req.app.get("io");
+
     notifyTaskUsers(io, "task:updated", task);
+    await saveTaskNotifications(io, task, "task:updated");
 
     return res.json(task);
   } catch (error) {
@@ -311,16 +362,7 @@ async function remove(req, res, next) {
 
     const existing = await prisma.task.findUnique({
       where: { id },
-      select: {
-        id: true,
-        title: true,
-        priority: true,
-        projectId: true,
-        assigneeId: true,
-        project: {
-          select: { ownerId: true },
-        },
-      },
+      select: taskSelect,
     });
 
     if (!existing) {
@@ -335,11 +377,14 @@ async function remove(req, res, next) {
       });
     }
 
+    await prisma.task.delete({
+      where: { id },
+    });
+
     const io = req.app.get("io");
 
-    await prisma.task.delete({ where: { id } });
-
     notifyTaskUsers(io, "task:deleted", existing);
+    await saveTaskNotifications(io, existing, "task:deleted");
 
     return res.status(204).send();
   } catch (error) {

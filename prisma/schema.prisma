@@ -36,6 +36,7 @@ model User {
   comments      Comment[]
   refreshTokens RefreshToken[]
   files         UploadedFile[]
+  notifications Notification[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -116,4 +117,19 @@ model Comment {
   @@index([taskId])
   @@index([authorId])
   @@index([createdAt])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  priority  String   @default("MEDIUM")
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
 }

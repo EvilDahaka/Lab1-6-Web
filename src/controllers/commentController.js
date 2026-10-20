@@ -1,6 +1,7 @@
 ﻿
 import prisma from "../lib/prisma.js";
 import { z } from "zod";
+import { createNotification } from "../services/notificationService.js";
 
 const createSchema = z.object({
   content: z.string().trim().min(1).max(5000),
@@ -17,14 +18,23 @@ const commentSelect = {
   authorId: true,
   taskId: true,
   author: {
-    select: { id: true, name: true, email: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
   },
   task: {
     select: {
       id: true,
       title: true,
+      projectId: true,
       project: {
-        select: { id: true, name: true, ownerId: true },
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+        },
       },
     },
   },
@@ -53,22 +63,63 @@ function notifyCommentUsers(io, event, comment) {
     comment.task?.project?.ownerId,
   ]);
 
+  const messages = {
+    "comment:created": `Додано коментар до завдання: ${comment.task.title}`,
+    "comment:updated": `Оновлено коментар до завдання: ${comment.task.title}`,
+    "comment:deleted": `Видалено коментар до завдання: ${comment.task.title}`,
+  };
+
+  const message = messages[event];
+
+  const rooms = [...userIds]
+    .filter((userId) => userId != null)
+    .map((userId) => `user:${userId}`);
+
+  const projectId = comment.task?.projectId;
+
+  if (projectId != null) {
+    rooms.push(`project:${projectId}`);
+  }
+
+  if (rooms.length === 0) return;
+
+  io.to(rooms).emit(event, {
+    comment,
+    notification: {
+      type: event,
+      priority: "MEDIUM",
+      message,
+      createdAt: new Date().toISOString(),
+    },
+  });
+}
+
+async function saveCommentNotifications(io, event, comment) {
+  if (!comment) return;
+
+  const userIds = new Set([
+    comment.authorId,
+    comment.task?.project?.ownerId,
+  ]);
+
+  const messages = {
+    "comment:created": `Додано коментар до завдання: ${comment.task.title}`,
+    "comment:updated": `Оновлено коментар до завдання: ${comment.task.title}`,
+    "comment:deleted": `Видалено коментар до завдання: ${comment.task.title}`,
+  };
+
+  const message = messages[event];
+
+  if (!message) return;
+
   for (const userId of userIds) {
     if (userId == null) continue;
 
-    io.to(`user:${userId}`).emit(event, {
-      comment,
-      notification: {
-        type: event,
-        priority: "MEDIUM",
-        message:
-          event === "comment:created"
-            ? `Додано коментар до завдання: ${comment.task.title}`
-            : event === "comment:updated"
-              ? `Оновлено коментар до завдання: ${comment.task.title}`
-              : `Видалено коментар до завдання: ${comment.task.title}`,
-        createdAt: new Date().toISOString(),
-      },
+    await createNotification(io, {
+      userId,
+      type: event,
+      priority: "MEDIUM",
+      message,
     });
   }
 }
@@ -152,7 +203,10 @@ export const create = async (req, res, next) => {
       select: {
         id: true,
         project: {
-          select: { ownerId: true },
+          select: {
+            id: true,
+            ownerId: true,
+          },
         },
       },
     });
@@ -181,11 +235,10 @@ export const create = async (req, res, next) => {
       select: commentSelect,
     });
 
-    notifyCommentUsers(
-      req.app.get("io"),
-      "comment:created",
-      comment
-    );
+    const io = req.app.get("io");
+
+    notifyCommentUsers(io, "comment:created", comment);
+    await saveCommentNotifications(io, "comment:created", comment);
 
     return res.status(201).json(comment);
   } catch (error) {
@@ -214,10 +267,7 @@ export const update = async (req, res, next) => {
 
     const existing = await prisma.comment.findUnique({
       where: { id },
-      select: {
-        id: true,
-        authorId: true,
-      },
+      select: commentSelect,
     });
 
     if (!existing) {
@@ -228,8 +278,7 @@ export const update = async (req, res, next) => {
 
     if (!canManage(existing, req)) {
       return res.status(403).json({
-        error:
-          "Редагувати коментар може лише його автор або адміністратор",
+        error: "Редагувати коментар може лише його автор або адміністратор",
       });
     }
 
@@ -239,11 +288,10 @@ export const update = async (req, res, next) => {
       select: commentSelect,
     });
 
-    notifyCommentUsers(
-      req.app.get("io"),
-      "comment:updated",
-      comment
-    );
+    const io = req.app.get("io");
+
+    notifyCommentUsers(io, "comment:updated", comment);
+    await saveCommentNotifications(io, "comment:updated", comment);
 
     return res.json(comment);
   } catch (error) {
@@ -274,8 +322,7 @@ export const remove = async (req, res, next) => {
 
     if (!canManage(existing, req)) {
       return res.status(403).json({
-        error:
-          "Видалити коментар може лише його автор або адміністратор",
+        error: "Видалити коментар може лише його автор або адміністратор",
       });
     }
 
@@ -283,11 +330,10 @@ export const remove = async (req, res, next) => {
       where: { id },
     });
 
-    notifyCommentUsers(
-      req.app.get("io"),
-      "comment:deleted",
-      existing
-    );
+    const io = req.app.get("io");
+
+    notifyCommentUsers(io, "comment:deleted", existing);
+    await saveCommentNotifications(io, "comment:deleted", existing);
 
     return res.status(204).send();
   } catch (error) {
