@@ -25,10 +25,10 @@
   },
   "scripts": {
     "postinstall": "prisma skills sync || exit 0",
-    "start": "node --env-file=.env src/server.js",
+    "start": "node src/server.js",
     "dev": "node --env-file=.env --watch src/server.js",
     "test": "node --env-file=.env --test",
-     "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy"
   },
   "type": "module"
 }
