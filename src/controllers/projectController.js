@@ -12,20 +12,20 @@ function notifyProjectUsers(io, event, project) {
   ]);
 
   for (const userId of userIds) {
-    if (userId != null) {
-      io.to(`user:${userId}`).emit(event, {
-        project,
-        notification: {
-          type: event,
-          priority: "MEDIUM",
-          message:
-            event === "project:created"
-              ? `Створено проєкт: ${project.name}`
-              : `Оновлено проєкт: ${project.name}`,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
+    if (userId == null) continue;
+
+    io.to(`user:${userId}`).emit(event, {
+      project,
+      notification: {
+        type: event,
+        priority: "MEDIUM",
+        message:
+          event === "project:created"
+            ? `Створено проєкт: ${project.name}`
+            : `Оновлено проєкт: ${project.name}`,
+        createdAt: new Date().toISOString(),
+      },
+    });
   }
 }
 
@@ -49,7 +49,7 @@ async function saveProjectNotifications(io, project, event) {
   for (const userId of userIds) {
     if (userId == null) continue;
 
-    await createNotification(prisma, io, {
+    await createNotification(io, {
       userId,
       type: event,
       priority: "MEDIUM",
