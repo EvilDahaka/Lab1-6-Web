@@ -1,68 +1,123 @@
-import Button from '../components/common/Button';
-import Input from '../components/common/Input';
-import Card from '../components/common/Card';
-import Badge from '../components/common/Badge';
-import Loading from '../components/common/Loading';
+
+import { Link } from 'react-router';
+import { useAuthStore } from '@/stores/authStore';
 
 function Home() {
+  const user = useAuthStore((state) => state.user);
+
+  const features = [
+    {
+      icon: '📁',
+      title: 'Управління проєктами',
+      description: 'Створюй проєкти, переглядай їх та контролюй робочий процес.',
+    },
+    {
+      icon: '📋',
+      title: 'Керування завданнями',
+      description: 'Додавай завдання, змінюй їх статуси та стеж за виконанням.',
+    },
+    {
+      icon: '👥',
+      title: 'Користувачі',
+      description: 'Переглядай інформацію про користувачів системи.',
+    },
+  ];
+
   return (
-    <div className="space-y-8 p-4 sm:p-6">
-      <section>
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-          Task Manager
-        </h1>
-        <p className="mt-2 text-sm text-gray-600 sm:text-base">
-          Керування проєктами та завданнями
-        </p>
+    <div className="space-y-12 pb-10">
+      <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-blue-800 px-6 py-16 text-white shadow-lg sm:px-12">
+        <div className="max-w-2xl">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-200">
+            Task Manager
+          </p>
+
+          <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
+            Керуй роботою ефективніше
+          </h1>
+
+          <p className="mt-5 text-base leading-relaxed text-slate-200 sm:text-lg">
+            Зручна система для управління проєктами, завданнями
+            та організації спільної роботи.
+          </p>
+
+          <div className="mt-8 flex flex-wrap gap-4">
+            {user ? (
+              <Link
+                to="/dashboard"
+                className="rounded-lg bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-blue-100"
+              >
+                Перейти до Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="rounded-lg bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-blue-100"
+                >
+                  Увійти
+                </Link>
+
+                <Link
+                  to="/register"
+                  className="rounded-lg border border-white px-6 py-3 font-semibold text-white transition hover:bg-white/10"
+                >
+                  Реєстрація
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card title="Кнопки">
-          <div className="flex flex-wrap gap-3">
-            <Button variant="primary">Primary</Button>
-            <Button variant="secondary">Secondary</Button>
-            <Button variant="danger">Danger</Button>
-          </div>
-        </Card>
+      <section>
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Можливості системи
+          </h2>
+          <p className="mt-2 text-gray-600">
+            Усе необхідне для організації та контролю роботи в одному місці.
+          </p>
+        </div>
 
-        <Card title="Поля введення">
-          <div className="w-full space-y-4">
-            <Input
-              label="Назва завдання"
-              placeholder="Введіть назву завдання"
-            />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {features.map((feature) => (
+            <div
+              key={feature.title}
+              className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+            >
+              <div className="mb-4 text-4xl">{feature.icon}</div>
 
-            <Input
-              label="Електронна пошта"
-              type="email"
-              placeholder="example@gmail.com"
-            />
+              <h3 className="text-lg font-bold text-gray-900">
+                {feature.title}
+              </h3>
 
-            <Input
-              label="Поле з помилкою"
-              placeholder="Введіть дані"
-              error="Це поле обов'язкове"
-            />
-          </div>
-        </Card>
+              <p className="mt-3 text-sm leading-relaxed text-gray-600">
+                {feature.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <Card title="Статуси завдань">
-          <div className="flex flex-wrap gap-3">
-            <Badge variant="success">Виконано</Badge>
-            <Badge variant="warning">У процесі</Badge>
-            <Badge variant="danger">Прострочено</Badge>
-            <Badge variant="info">Нове завдання</Badge>
-          </div>
-        </Card>
+      {user && (
+        <section className="rounded-xl border border-blue-100 bg-blue-50 p-6">
+          <h2 className="text-xl font-bold text-gray-900">
+            Вітаємо, {user.name}!
+          </h2>
 
-        <Card title="Індикатори завантаження">
-          <div className="flex flex-wrap items-center justify-around">
-            <Loading size="small" text="Small" />
-            <Loading size="medium" text="Medium" />
-            <Loading size="large" text="Large" />
-          </div>
-        </Card>
-      </div>
+          <p className="mt-2 text-gray-600">
+            Ти увійшов до системи. Можеш перейти до особистого кабінету
+            та продовжити роботу.
+          </p>
+
+          <Link
+            to="/dashboard"
+            className="mt-5 inline-block rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800"
+          >
+            Відкрити Dashboard
+          </Link>
+        </section>
+      )}
     </div>
   );
 }

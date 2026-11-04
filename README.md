@@ -48,6 +48,11 @@ https://github.com/EvilDahaka/Lab1-6-Web
 - Tailwind CSS 4
 - React Router 8
 - Axios
+- Zustand
+- TanStack React Query
+- React Hook Form
+- Zod
+- React Hot Toast
 - ESLint
 - Prettier
 
@@ -81,13 +86,23 @@ https://github.com/EvilDahaka/Lab1-6-Web
 ### Frontend
 
 - Створення адаптивного користувацького інтерфейсу.
-- Налаштування маршрутизації між сторінками за допомогою React Router.
-- Створення спільного Layout для сторінок.
-- Реалізація компонентів Header та Footer.
-- Створення повторно використовуваних UI-компонентів Button, Input, Card, Badge та Loading.
-- Налаштування Axios для взаємодії з REST API.
+- Реєстрація та авторизація користувачів.
+- Збереження інформації про авторизованого користувача.
+- Збереження токена доступу за допомогою Zustand Persist.
+- Захист сторінок від неавторизованого доступу.
+- Розмежування доступу до функцій відповідно до ролей користувачів.
+- Панель керування Dashboard.
+- Перегляд, створення, редагування та видалення користувачів.
+- Перегляд, створення, редагування та видалення проєктів.
+- Пошук та пагінація списків.
+- Налаштування маршрутизації за допомогою React Router.
+- Використання Axios для взаємодії з REST API.
+- Керування станом за допомогою Zustand.
+- Отримання та кешування даних за допомогою TanStack React Query.
+- Робота з формами за допомогою React Hook Form.
+- Перевірка введених даних за допомогою Zod.
+- Відображення повідомлень про результати операцій за допомогою React Hot Toast.
 - Підтримка локального та production-середовища.
-- Налаштування власної теми Tailwind CSS 4.
 - Використання TypeScript для типізації компонентів і властивостей.
 
 ---
@@ -106,24 +121,48 @@ task-manager-api/
 │   │   │   │   ├── Input.tsx
 │   │   │   │   ├── Card.tsx
 │   │   │   │   ├── Badge.tsx
-│   │   │   │   └── Loading.tsx
+│   │   │   │   ├── Loading.tsx
+│   │   │   │   ├── FormField.tsx
+│   │   │   │   └── ProtectedRoute.tsx
 │   │   │   └── layout/
 │   │   │       ├── Header.tsx
 │   │   │       ├── Footer.tsx
 │   │   │       └── Layout.tsx
+│   │   │
 │   │   ├── pages/
 │   │   │   ├── Home.tsx
 │   │   │   ├── About.tsx
-│   │   │   └── NotFound.tsx
+│   │   │   ├── NotFound.tsx
+│   │   │   ├── LoginPage.tsx
+│   │   │   ├── RegisterPage.tsx
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── UsersListPage.tsx
+│   │   │   ├── UserCreatePage.tsx
+│   │   │   ├── UserEditPage.tsx
+│   │   │   └── ProjectsPage.tsx
+│   │   │
 │   │   ├── services/
-│   │   │   └── api.ts
+│   │   │   ├── api.ts
+│   │   │   ├── users.service.ts
+│   │   │   └── projects.service.ts
+│   │   │
+│   │   ├── stores/
+│   │   │   └── authStore.ts
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   └── user.schema.ts
+│   │   │
 │   │   ├── hooks/
+│   │   │   └── useDebounce.ts
+│   │   │
 │   │   ├── types/
-│   │   ├── utils/
-│   │   ├── constants/
+│   │   │   └── api.types.ts
+│   │   │
 │   │   ├── App.tsx
 │   │   ├── index.css
 │   │   └── main.tsx
+│   │
 │   ├── .env.development
 │   ├── .env.production
 │   ├── package.json
@@ -245,13 +284,13 @@ npm install
 
 ### 7. Налаштування змінних середовища Frontend
 
-Для локальної розробки створити файл `.env.development`:
+Для локальної розробки використовується файл `.env.development`:
 
 ```env
 VITE_API_URL=http://localhost:3000/api
 ```
 
-Для production-середовища створити файл `.env.production`:
+Для production-середовища використовується файл `.env.production`:
 
 ```env
 VITE_API_URL=https://task-manager-api-production-154a.up.railway.app/api
@@ -301,23 +340,26 @@ npm run preview
 
 ---
 
-## Frontend: структура та компоненти
+## Frontend: сторінки та компоненти
 
-Клієнтська частина побудована за принципом розділення компонентів, сторінок і сервісів.
+Клієнтська частина побудована з використанням React, TypeScript та Vite. Структура застосунку передбачає розділення сторінок, компонентів, сервісів, схем валідації та керування станом.
 
 ### Сторінки
 
-- `Home` — головна сторінка застосунку.
-- `About` — інформація про застосунок.
-- `NotFound` — сторінка для невідомих маршрутів.
+| Сторінка | Призначення |
+|---|---|
+| Home | Головна сторінка застосунку |
+| About | Інформація про застосунок |
+| LoginPage | Авторизація користувача |
+| RegisterPage | Реєстрація користувача |
+| DashboardPage | Панель керування |
+| UsersListPage | Список користувачів |
+| UserCreatePage | Створення користувача |
+| UserEditPage | Редагування користувача |
+| ProjectsPage | Перегляд та керування проєктами |
+| NotFound | Сторінка для невідомих маршрутів |
 
-### Компоненти Layout
-
-- `Header` — шапка застосунку з навігацією.
-- `Footer` — нижня частина сторінки.
-- `Layout` — спільна структура сторінок із використанням Outlet.
-
-### Повторно використовувані UI-компоненти
+### Повторно використовувані компоненти
 
 | Компонент | Призначення |
 |---|---|
@@ -326,6 +368,20 @@ npm run preview
 | Card | Картка для групування вмісту |
 | Badge | Позначення статусів та інформаційних міток |
 | Loading | Індикатор завантаження |
+| FormField | Поле форми з підписом та повідомленням про помилку |
+| ProtectedRoute | Захист сторінок від неавторизованого доступу |
+
+### Керування станом та даними
+
+**Zustand** використовується для зберігання інформації про авторизованого користувача та токена доступу.
+
+**TanStack React Query** використовується для отримання, кешування та оновлення даних із сервера.
+
+**Axios** забезпечує HTTP-взаємодію з REST API. Для автоматичного додавання токена доступу використовується request interceptor. Response interceptor обробляє відповіді зі статусом `401`.
+
+**React Hook Form та Zod** використовуються для роботи з формами та перевірки введених даних.
+
+**React Hot Toast** використовується для відображення повідомлень про результати операцій.
 
 ### Маршрутизація
 
@@ -335,7 +391,16 @@ npm run preview
 |---|---|
 | `/` | Home |
 | `/about` | About |
+| `/login` | LoginPage |
+| `/register` | RegisterPage |
+| `/dashboard` | DashboardPage |
+| `/users` | UsersListPage |
+| `/users/create` | UserCreatePage |
+| `/users/:id/edit` | UserEditPage |
+| `/projects` | ProjectsPage |
 | `*` | NotFound |
+
+Маршрути Dashboard, користувачів та проєктів захищені від доступу неавторизованих користувачів.
 
 ### Стилізація
 
@@ -344,20 +409,6 @@ npm run preview
 Власні кольори та параметри теми визначаються за допомогою директиви `@theme` у файлі `src/index.css`.
 
 Інтерфейс використовує адаптивні класи Tailwind CSS для коректного відображення на різних розмірах екранів.
-
-### Взаємодія з API
-
-Для HTTP-запитів використовується Axios.
-
-Конфігурація API розташована у файлі:
-
-```text
-client/src/services/api.ts
-```
-
-Базова адреса API визначається через змінну середовища `VITE_API_URL`.
-
-Axios використовує request interceptor для додавання Bearer-токена до запитів за наявності токена в localStorage, а response interceptor обробляє відповіді зі статусом `401`.
 
 ---
 
@@ -461,8 +512,8 @@ import { io } from "socket.io-client";
 
 const socket = io("http://localhost:3000", {
   auth: {
-    token: accessToken,
-  },
+    token: accessToken
+  }
 });
 ```
 
@@ -475,8 +526,8 @@ const socket = io(
   "https://task-manager-api-production-154a.up.railway.app",
   {
     auth: {
-      token: accessToken,
-    },
+      token: accessToken
+    }
   }
 );
 ```
@@ -550,6 +601,8 @@ socket.on("room:left", (data) => {
 
 Онлайн-статуси в поточній реалізації зберігаються в пам'яті сервера. Тому після перезапуску сервера список активних користувачів формується заново.
 
+На поточному етапі Socket.IO реалізований на серверній частині. Підключення real-time функціональності до React-клієнта передбачено в наступному етапі розробки.
+
 ---
 
 ## Пошук, фільтрація та пагінація
@@ -604,7 +657,7 @@ npm run lint
 npm run build
 ```
 
-У процесі розробки перевіряються коректність компіляції TypeScript, відсутність помилок ESLint та успішність production-збірки.
+Перша команда перевіряє код за допомогою ESLint, друга виконує production-збірку застосунку.
 
 ### Запуск автоматизованих тестів Backend
 
@@ -618,11 +671,15 @@ npm test
 
 ## Скріншоти
 
-### Головна сторінка
+### Головні сторінки
 
-![Task Manager Home](<reports/screenshots2/main.png>)
+![Task Manager Home](<reports/screenshots2/home1.png>)
 
+![Task Manager Home](<reports/screenshots2/register.png>)
 
+![Task Manager Home](<reports/screenshots2/users.png>)
+
+![Task Manager Home](<reports/screenshots2/projects.png>)
 
 ---
 
@@ -704,8 +761,8 @@ node src/server.js
 
 ## Автор
 
-**Автор:** [Лешо Давид]  
-**Група:** [42]
+**Автор:** Лешо Давид  
+**Група:** 42
 
 ---
 
