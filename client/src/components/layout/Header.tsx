@@ -1,6 +1,8 @@
+
 import { Link, useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/authStore';
 import Button from '@/components/common/Button';
+import NotificationBell from '@/components/common/NotificationBell';
 
 function Header() {
   const user = useAuthStore((state) => state.user);
@@ -37,6 +39,8 @@ function Header() {
               <Link to="/users" className="transition hover:text-primary-500">
                 Користувачі
               </Link>
+
+              <NotificationBell />
 
               <span className="text-sm text-gray-300">
                 {user.name} ({user.role})

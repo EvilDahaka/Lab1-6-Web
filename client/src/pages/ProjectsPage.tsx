@@ -6,7 +6,17 @@ import projectsService from '@/services/projects.service';
 import type { Project } from '@/services/projects.service';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Tabs from '@/components/common/Tabs';
+import SearchableDropdown from '@/components/common/SearchableDropdown';
+import type { DropdownOption } from '@/components/common/SearchableDropdown';
 import useDebounce from '@/hooks/useDebounce';
+
+const sortOptions: DropdownOption[] = [
+  { value: 'none', label: 'Без сортування' },
+  { value: 'asc', label: 'За назвою: А–Я' },
+  { value: 'desc', label: 'За назвою: Я–А' },
+];
 
 function ProjectsPage() {
   const queryClient = useQueryClient();
@@ -14,9 +24,12 @@ function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [page, setPage] = useState(1);
+  const [activeTab, setActiveTab] = useState('projects');
+  const [sortOrder, setSortOrder] = useState('none');
 
   const debouncedSearch = useDebounce(search, 500);
 
@@ -24,6 +37,20 @@ function ProjectsPage() {
     queryKey: ['projects', page, debouncedSearch],
     queryFn: () => projectsService.getAll(page, 10, debouncedSearch),
   });
+
+  const sortedProjects = data?.data
+    ? [...data.data].sort((a, b) => {
+        if (sortOrder === 'asc') {
+          return a.name.localeCompare(b.name, 'uk');
+        }
+
+        if (sortOrder === 'desc') {
+          return b.name.localeCompare(a.name, 'uk');
+        }
+
+        return 0;
+      })
+    : [];
 
   const refreshProjects = () => {
     queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -36,6 +63,7 @@ function ProjectsPage() {
       setName('');
       setDescription('');
       setShowForm(false);
+      setActiveTab('projects');
       setPage(1);
       refreshProjects();
     },
@@ -52,6 +80,7 @@ function ProjectsPage() {
       setEditingProject(null);
       setName('');
       setDescription('');
+      setActiveTab('projects');
       refreshProjects();
     },
     onError: () => toast.error('Не вдалося оновити проєкт'),
@@ -61,6 +90,7 @@ function ProjectsPage() {
     mutationFn: projectsService.remove,
     onSuccess: () => {
       toast.success('Проєкт видалено');
+      setSelectedProject(null);
       refreshProjects();
     },
     onError: () => toast.error('Не вдалося видалити проєкт'),
@@ -71,6 +101,7 @@ function ProjectsPage() {
     setName('');
     setDescription('');
     setShowForm(true);
+    setActiveTab('create');
   };
 
   const openEditForm = (project: Project) => {
@@ -78,6 +109,7 @@ function ProjectsPage() {
     setEditingProject(project);
     setName(project.name);
     setDescription(project.description);
+    setActiveTab('create');
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -103,9 +135,9 @@ function ProjectsPage() {
     }
   };
 
-  const handleDelete = (project: Project) => {
-    if (window.confirm(`Видалити проєкт «${project.name}»?`)) {
-      deleteMutation.mutate(project.id);
+  const handleDelete = () => {
+    if (selectedProject) {
+      deleteMutation.mutate(selectedProject.id);
     }
   };
 
@@ -114,46 +146,133 @@ function ProjectsPage() {
     setEditingProject(null);
     setName('');
     setDescription('');
+    setActiveTab('projects');
   };
 
-  if (isLoading) {
-    return <p className="p-6 text-gray-600">Завантаження проєктів...</p>;
-  }
+  const tabs = [
+    {
+      id: 'projects',
+      label: 'Список проєктів',
+      content: (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input
+              placeholder="Пошук проєктів..."
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+            />
 
-  if (isError) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600">
-          Не вдалося завантажити проєкти. Перевір авторизацію.
-        </p>
-        <Button onClick={refreshProjects}>Повторити</Button>
-      </div>
-    );
-  }
+            <SearchableDropdown
+              options={sortOptions}
+              value={sortOrder}
+              onChange={setSortOrder}
+              placeholder="Оберіть сортування"
+              searchPlaceholder="Знайти спосіб сортування..."
+            />
+          </div>
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Проєкти</h1>
-          <p className="mt-2 text-gray-600">
-            Перегляд та керування проєктами.
-          </p>
+          {isLoading && (
+            <p className="text-gray-600">Завантаження проєктів...</p>
+          )}
+
+          {isError && (
+            <div>
+              <p className="text-red-600">
+                Не вдалося завантажити проєкти. Перевір авторизацію.
+              </p>
+              <Button onClick={refreshProjects}>Повторити</Button>
+            </div>
+          )}
+
+          {data && (
+            <>
+              {data.data.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+                  <p className="text-lg font-medium text-gray-700">
+                    Проєктів поки немає
+                  </p>
+                  <p className="mt-2 text-gray-500">
+                    Створи перший проєкт, щоб він з'явився у списку.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-4">Назва</th>
+                        <th className="p-4">Опис</th>
+                        <th className="p-4">Дії</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {sortedProjects.map((project) => (
+                        <tr key={project.id} className="border-t border-gray-200">
+                          <td className="p-4 font-medium">{project.name}</td>
+                          <td className="p-4 text-gray-600">
+                            {project.description}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="secondary"
+                                onClick={() => openEditForm(project)}
+                              >
+                                Редагувати
+                              </Button>
+
+                              <Button
+                                variant="danger"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => setSelectedProject(project)}
+                              >
+                                Видалити
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {data.pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="secondary"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => current - 1)}
+                  >
+                    Назад
+                  </Button>
+
+                  <span>
+                    Сторінка {page} з {data.pagination.totalPages}
+                  </span>
+
+                  <Button
+                    variant="secondary"
+                    disabled={page >= data.pagination.totalPages}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Далі
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </div>
-
-        <Button onClick={openCreateForm}>Створити проєкт</Button>
-      </div>
-
-      <Input
-        placeholder="Пошук проєктів..."
-        value={search}
-        onChange={(event) => {
-          setSearch(event.target.value);
-          setPage(1);
-        }}
-      />
-
-      {(showForm || editingProject) && (
+      ),
+    },
+    {
+      id: 'create',
+      label: 'Створення проєкту',
+      content: (
         <form
           onSubmit={handleSubmit}
           className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
@@ -195,83 +314,57 @@ function ProjectsPage() {
             </Button>
           </div>
         </form>
-      )}
-
-      {data?.data.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
-          <p className="text-lg font-medium text-gray-700">
-            Проєктів поки немає
+      ),
+    },
+    {
+      id: 'info',
+      label: 'Інформація',
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <h2 className="text-xl font-semibold">Про управління проєктами</h2>
+          <p className="mt-3 text-gray-600">
+            У цьому розділі можна створювати, переглядати, редагувати та
+            видаляти проєкти. Для пошуку використовуй поле на вкладці
+            «Список проєктів».
           </p>
-          <p className="mt-2 text-gray-500">
-            Створи перший проєкт, щоб він з'явився у списку.
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Проєкти</h1>
+          <p className="mt-2 text-gray-600">
+            Перегляд та керування проєктами.
           </p>
         </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-left">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-4">Назва</th>
-                <th className="p-4">Опис</th>
-                <th className="p-4">Дії</th>
-              </tr>
-            </thead>
 
-            <tbody>
-              {data?.data.map((project) => (
-                <tr key={project.id} className="border-t border-gray-200">
-                  <td className="p-4 font-medium">{project.name}</td>
-                  <td className="p-4 text-gray-600">
-                    {project.description}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => openEditForm(project)}
-                      >
-                        Редагувати
-                      </Button>
+        <Button onClick={openCreateForm}>Створити проєкт</Button>
+      </div>
 
-                      <Button
-                        variant="danger"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => handleDelete(project)}
-                      >
-                        Видалити
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Tabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-      {data && data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <Button
-            variant="secondary"
-            disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Назад
-          </Button>
-
-          <span>
-            Сторінка {page} з {data.pagination.totalPages}
-          </span>
-
-          <Button
-            variant="secondary"
-            disabled={page >= data.pagination.totalPages}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Далі
-          </Button>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={selectedProject !== null}
+        title="Видалити проєкт?"
+        message={
+          selectedProject
+            ? `Ви впевнені, що хочете видалити проєкт «${selectedProject.name}»? Цю дію неможливо скасувати.`
+            : ''
+        }
+        confirmText="Видалити"
+        cancelText="Скасувати"
+        isLoading={deleteMutation.isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setSelectedProject(null)}
+      />
     </div>
   );
 }

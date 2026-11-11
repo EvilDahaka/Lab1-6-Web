@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
@@ -5,18 +6,35 @@ import toast from 'react-hot-toast';
 import usersService from '@/services/users.service';
 import useDebounce from '@/hooks/useDebounce';
 import { useAuthStore } from '@/stores/authStore';
+import { usePresence } from '@/hooks/usePresence';
+import { useSocketEvent } from '@/hooks/useSocketEvent';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
+import OnlineStatus from '@/components/common/OnlineStatus';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+
+interface UsersChangedPayload {
+  action: 'created' | 'updated' | 'deleted';
+  userId: number;
+}
 
 function UsersListPage() {
+  usePresence();
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+
   const debouncedSearch = useDebounce(search);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const currentUser = useAuthStore((state) => state.user);
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  useSocketEvent<UsersChangedPayload>('users:changed', () => {
+    queryClient.invalidateQueries({ queryKey: ['users'] });
+  });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['users', page, debouncedSearch],
@@ -27,14 +45,15 @@ function UsersListPage() {
     mutationFn: usersService.remove,
     onSuccess: () => {
       toast.success('Користувача видалено');
+      setSelectedUserId(null);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
     onError: () => toast.error('Не вдалося видалити користувача'),
   });
 
-  const handleDelete = (id: number) => {
-    if (confirm('Ви впевнені, що хочете видалити користувача?')) {
-      deleteMutation.mutate(id);
+  const handleDelete = () => {
+    if (selectedUserId !== null) {
+      deleteMutation.mutate(selectedUserId);
     }
   };
 
@@ -76,6 +95,7 @@ function UsersListPage() {
                   <th className="p-3">Ім’я</th>
                   <th className="p-3">Email</th>
                   <th className="p-3">Роль</th>
+                  <th className="p-3">Статус</th>
                   {isAdmin && <th className="p-3">Дії</th>}
                 </tr>
               </thead>
@@ -86,6 +106,9 @@ function UsersListPage() {
                     <td className="p-3">{user.name}</td>
                     <td className="p-3">{user.email}</td>
                     <td className="p-3">{user.role}</td>
+                    <td className="p-3">
+                      <OnlineStatus userId={user.id} />
+                    </td>
 
                     {isAdmin && (
                       <td className="p-3">
@@ -100,7 +123,7 @@ function UsersListPage() {
                           <Button
                             variant="danger"
                             disabled={deleteMutation.isPending}
-                            onClick={() => handleDelete(user.id)}
+                            onClick={() => setSelectedUserId(user.id)}
                           >
                             Видалити
                           </Button>
@@ -113,7 +136,7 @@ function UsersListPage() {
                 {data.data.length === 0 && (
                   <tr>
                     <td
-                      colSpan={isAdmin ? 4 : 3}
+                      colSpan={isAdmin ? 5 : 4}
                       className="p-4 text-center text-gray-500"
                     >
                       Користувачів не знайдено
@@ -147,6 +170,17 @@ function UsersListPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        isOpen={selectedUserId !== null}
+        title="Видалити користувача?"
+        message="Ви впевнені, що хочете видалити цього користувача? Цю дію неможливо скасувати."
+        confirmText="Видалити"
+        cancelText="Скасувати"
+        isLoading={deleteMutation.isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setSelectedUserId(null)}
+      />
     </div>
   );
 }

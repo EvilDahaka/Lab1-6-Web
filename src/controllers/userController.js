@@ -159,6 +159,11 @@ export const create = async (req, res, next) => {
       select: publicUserSelect,
     });
 
+    req.app.get("io")?.emit("users:changed", {
+      action: "created",
+      userId: user.id,
+    });
+
     return res.status(201).json(user);
   } catch (error) {
     if (error.code === "P2002") {
@@ -196,6 +201,11 @@ export const update = async (req, res, next) => {
       select: publicUserSelect,
     });
 
+    req.app.get("io")?.emit("users:changed", {
+      action: "updated",
+      userId: user.id,
+    });
+
     return res.json(user);
   } catch (error) {
     if (error.code === "P2025") {
@@ -225,6 +235,12 @@ export const remove = async (req, res, next) => {
     }
 
     await prisma.user.delete({ where: { id } });
+
+    req.app.get("io")?.emit("users:changed", {
+      action: "deleted",
+      userId: id,
+    });
+
     return res.status(204).send();
   } catch (error) {
     if (error.code === "P2025") {

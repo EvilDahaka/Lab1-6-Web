@@ -1,4 +1,5 @@
-﻿import crypto from "node:crypto";
+﻿
+import crypto from "node:crypto";
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -56,7 +57,7 @@ export async function register(req, res, next) {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: "екоректні дані реєстрації",
+        error: "Некоректні дані реєстрації",
         details: parsed.error.issues
       });
     }
@@ -74,10 +75,16 @@ export async function register(req, res, next) {
     const accessToken = makeAccessToken(user);
     const refreshToken = await issueRefreshToken(user.id);
 
+    // Повідомляємо інші клієнти про нового користувача
+    req.app.get("io")?.emit("users:changed", {
+      action: "created",
+      userId: user.id
+    });
+
     res.status(201).json({ user, accessToken, refreshToken });
   } catch (error) {
     if (error.code === "P2002") {
-      return res.status(409).json({ error: "я електронна адреса вже зареєстрована" });
+      return res.status(409).json({ error: "Ця електронна адреса вже зареєстрована" });
     }
     next(error);
   }
@@ -87,7 +94,7 @@ export async function login(req, res, next) {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "екоректна електронна адреса або пароль" });
+      return res.status(400).json({ error: "Некоректна електронна адреса або пароль" });
     }
 
     const user = await prisma.user.findUnique({
@@ -95,12 +102,12 @@ export async function login(req, res, next) {
     });
 
     if (!user?.passwordHash) {
-      return res.status(401).json({ error: "еправильна електронна адреса або пароль" });
+      return res.status(401).json({ error: "Неправильна електронна адреса або пароль" });
     }
 
     const valid = await argon2.verify(user.passwordHash, parsed.data.password);
     if (!valid) {
-      return res.status(401).json({ error: "еправильна електронна адреса або пароль" });
+      return res.status(401).json({ error: "Неправильна електронна адреса або пароль" });
     }
 
     const safeUser = {
@@ -124,7 +131,7 @@ export async function refresh(req, res, next) {
   try {
     const token = req.body?.refreshToken;
     if (typeof token !== "string" || token.length < 20) {
-      return res.status(400).json({ error: "отрібен refreshToken" });
+      return res.status(400).json({ error: "Потрібен refreshToken" });
     }
 
     const tokenHash = hashToken(token);
@@ -172,7 +179,7 @@ export async function logout(req, res, next) {
   try {
     const token = req.body?.refreshToken;
     if (typeof token !== "string") {
-      return res.status(400).json({ error: "отрібен refreshToken" });
+      return res.status(400).json({ error: "Потрібен refreshToken" });
     }
 
     await prisma.refreshToken.updateMany({
@@ -195,7 +202,7 @@ export async function changePassword(req, res, next) {
     const parsed = passwordSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: "оточний пароль і новий пароль (не менше 8 символів) обов'язкові"
+        error: "Поточний пароль і новий пароль (не менше 8 символів) обов'язкові"
       });
     }
 
@@ -205,7 +212,7 @@ export async function changePassword(req, res, next) {
 
     if (!user?.passwordHash ||
         !(await argon2.verify(user.passwordHash, parsed.data.currentPassword))) {
-      return res.status(400).json({ error: "оточний пароль неправильний" });
+      return res.status(400).json({ error: "Поточний пароль неправильний" });
     }
 
     const passwordHash = await argon2.hash(parsed.data.newPassword, {
@@ -223,7 +230,7 @@ export async function changePassword(req, res, next) {
       })
     ]);
 
-    res.json({ message: "ароль змінено. війдіть повторно." });
+    res.json({ message: "Пароль змінено. Увійдіть повторно." });
   } catch (error) {
     next(error);
   }
@@ -235,7 +242,7 @@ export async function me(req, res, next) {
       where: { id: Number(req.user.id) },
       select: publicUser
     });
-    if (!user) return res.status(404).json({ error: "ористувача не знайдено" });
+    if (!user) return res.status(404).json({ error: "Користувача не знайдено" });
     res.json(user);
   } catch (error) {
     next(error);

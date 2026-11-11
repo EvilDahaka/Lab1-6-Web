@@ -56,6 +56,7 @@ export function initSocket(server) {
     const wasOffline = userSockets.size === 0;
     userSockets.add(socket.id);
 
+    // Передаємо список користувачів онлайн
     socket.emit("presence:list", {
       onlineUserIds: [...onlineUsers.keys()],
     });
@@ -73,6 +74,7 @@ export function initSocket(server) {
       userId,
     });
 
+    // Запит актуального списку користувачів онлайн
     socket.on("presence:get", () => {
       socket.emit("presence:list", {
         onlineUserIds: [...onlineUsers.keys()],
@@ -152,6 +154,7 @@ export function initSocket(server) {
       });
     });
 
+    // Обробка відключення користувача
     socket.on("disconnect", () => {
       const sockets = onlineUsers.get(userId);
 
@@ -159,8 +162,10 @@ export function initSocket(server) {
         return;
       }
 
+      // Видаляємо конкретне відключене з'єднання
       sockets.delete(socket.id);
 
+      // Користувач стає offline, якщо активних з'єднань більше немає
       if (sockets.size === 0) {
         onlineUsers.delete(userId);
 
