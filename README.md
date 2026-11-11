@@ -28,7 +28,7 @@ https://github.com/EvilDahaka/Lab1-6-Web
 
 **Frontend (Vercel):** 
 
-https://lab1-6-web.vercel.app/projects
+https://lab1-6-web.vercel.app/
 
 ---
 
