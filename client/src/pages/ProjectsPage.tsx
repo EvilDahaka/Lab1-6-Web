@@ -22,7 +22,6 @@ function ProjectsPage() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [name, setName] = useState('');
@@ -62,7 +61,6 @@ function ProjectsPage() {
       toast.success('Проєкт створено');
       setName('');
       setDescription('');
-      setShowForm(false);
       setActiveTab('projects');
       setPage(1);
       refreshProjects();
@@ -100,12 +98,10 @@ function ProjectsPage() {
     setEditingProject(null);
     setName('');
     setDescription('');
-    setShowForm(true);
     setActiveTab('create');
   };
 
   const openEditForm = (project: Project) => {
-    setShowForm(false);
     setEditingProject(project);
     setName(project.name);
     setDescription(project.description);
@@ -142,7 +138,6 @@ function ProjectsPage() {
   };
 
   const closeForm = () => {
-    setShowForm(false);
     setEditingProject(null);
     setName('');
     setDescription('');
